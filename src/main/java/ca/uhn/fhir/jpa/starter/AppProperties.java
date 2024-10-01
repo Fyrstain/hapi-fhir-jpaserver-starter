@@ -26,7 +26,6 @@ public class AppProperties {
 
   private Boolean cr_enabled = false;
   private Boolean ips_enabled = false;
-  private Boolean openapi_enabled = false;
   private Boolean mdm_enabled = false;
   private String mdm_rules_json_location = "mdm-rules.json";
   private boolean advanced_lucene_indexing = false;
@@ -111,15 +110,6 @@ public class AppProperties {
 
 	public List<String> getCustomProviderClasses() {
 		return custom_provider_classes;
-	}
-
-
-	public Boolean getOpenapi_enabled() {
-		return openapi_enabled;
-	}
-
-	public void setOpenapi_enabled(Boolean openapi_enabled) {
-		this.openapi_enabled = openapi_enabled;
 	}
 
 	public Boolean getUse_apache_address_strategy() {

@@ -52,8 +52,8 @@ import ca.uhn.fhir.jpa.validation.JpaValidationSupportChain;
 import ca.uhn.fhir.mdm.provider.MdmProviderLoader;
 import ca.uhn.fhir.narrative.DefaultThymeleafNarrativeGenerator;
 import ca.uhn.fhir.narrative2.NullNarrativeGenerator;
+import ca.uhn.fhir.parser.IParser;
 import ca.uhn.fhir.rest.api.IResourceSupportedSvc;
-import ca.uhn.fhir.rest.openapi.OpenApiInterceptor;
 import ca.uhn.fhir.rest.server.interceptor.partition.RequestTenantPartitionInterceptor;
 import ca.uhn.fhir.rest.server.*;
 import ca.uhn.fhir.rest.server.interceptor.*;
@@ -64,7 +64,9 @@ import ca.uhn.fhir.validation.IValidatorModule;
 import ca.uhn.fhir.validation.ResultSeverityEnum;
 import com.google.common.base.Strings;
 import jakarta.persistence.EntityManagerFactory;
+import org.apache.commons.io.FileUtils;
 import org.hl7.fhir.common.hapi.validation.support.CachingValidationSupport;
+import org.hl7.fhir.r5.model.CapabilityStatement;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
@@ -77,10 +79,15 @@ import org.springframework.orm.jpa.JpaTransactionManager;
 import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
 import org.springframework.web.cors.CorsConfiguration;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.stream.Collectors;
 import javax.sql.DataSource;
 
 import static ca.uhn.fhir.jpa.starter.common.validation.IRepositoryValidationInterceptorFactory.ENABLE_REPOSITORY_VALIDATING_INTERCEPTOR;
+import static ca.uhn.fhir.rest.client.api.ServerValidationModeEnum.NEVER;
 
 @Configuration
 // allow users to configure custom packages to scan for additional beans
@@ -285,6 +292,8 @@ public class StarterJpaConfig {
 				supportedResourceTypes.add("SearchParameter");
 			}
 			daoRegistry.setSupportedResourceTypes(supportedResourceTypes);
+		} else if (System.getenv("CSPath") != null) {
+			setSupportedResourcesFromCapabilityStatement(daoRegistry);
 		}
 
 		if (appProperties.getNarrative_enabled()) {
@@ -421,10 +430,6 @@ public class StarterJpaConfig {
 			}
 		}
 
-		if (appProperties.getOpenapi_enabled()) {
-			fhirServer.registerInterceptor(new OpenApiInterceptor());
-		}
-
 		// Bulk Export
 		if (appProperties.getBulk_export_enabled()) {
 			fhirServer.registerProvider(bulkDataExportProvider);
@@ -459,6 +464,8 @@ public class StarterJpaConfig {
 
 		// register custom providers
 		registerCustomProviders(fhirServer, appContext, appProperties.getCustomProviderClasses());
+
+		fhirSystemDao.getContext().getRestfulClientFactory().setServerValidationMode(NEVER);
 
 		return fhirServer;
 	}
@@ -579,6 +586,46 @@ public class StarterJpaConfig {
 			return confProvider;
 		} else {
 			throw new IllegalStateException();
+		}
+	}
+
+	/**
+	 * set Supported Resources from capability statement.
+	 */
+	public void setSupportedResourcesFromCapabilityStatement(DaoRegistry daoRegistry) {
+		List<String> supportedResourceTypes;
+		if (System.getenv("FHIR_VERSION").equals("R4")) {
+			File fileR4 = new File(System.getenv("CSPath"));
+			IParser parserR4 = FhirContext.forR4().newJsonParser();
+			org.hl7.fhir.r4.model.CapabilityStatement capabilityStatement;
+			try {
+				String resourceString = FileUtils.readFileToString(fileR4, StandardCharsets.UTF_8);
+				capabilityStatement = (org.hl7.fhir.r4.model.CapabilityStatement) parserR4.parseResource(resourceString);
+			} catch (IOException e) {
+				throw new RuntimeException("CapabilityStatement not found" + e.getMessage());
+			}
+			supportedResourceTypes = capabilityStatement.getRest().get(0)
+				.getResource().stream().map(r -> r.getType())
+				.collect(Collectors.toList());
+		} else {
+			File fileR5 = new File(System.getenv("CSPath"));
+			IParser parserR5 = FhirContext.forR5().newJsonParser();
+			CapabilityStatement capabilityStatementR5;
+			try {
+				String resourceString = FileUtils.readFileToString(fileR5, StandardCharsets.UTF_8);
+				capabilityStatementR5 = (CapabilityStatement) parserR5.parseResource(resourceString);
+			} catch (IOException e) {
+				throw new RuntimeException("CapabilityStatement not found" + e.getMessage());
+			}
+			supportedResourceTypes = capabilityStatementR5.getRest().get(0)
+				.getResource().stream().map(r -> r.getType())
+				.collect(Collectors.toList());
+		}
+		if (!supportedResourceTypes.isEmpty()) {
+			if (!supportedResourceTypes.contains("SearchParameter")) {
+				supportedResourceTypes.add("SearchParameter");
+			}
+			daoRegistry.setSupportedResourceTypes(supportedResourceTypes);
 		}
 	}
 }

@@ -195,6 +195,7 @@ public class FhirServerConfigCommon {
 		ourLog.info("Server configured to use '" + appProperties.getClient_id_strategy() + "' Client ID Strategy");
 
 		// Set and/or recommend default Server ID Strategy of UUID when using the ANY Client ID Strategy
+		appProperties.setServer_id_strategy(JpaStorageSettings.IdStrategyEnum.UUID);
 		if (appProperties.getClient_id_strategy() == JpaStorageSettings.ClientIdStrategyEnum.ANY) {
 			if (appProperties.getServer_id_strategy() == null) {
 				ourLog.info("Defaulting server to use '" + JpaStorageSettings.IdStrategyEnum.UUID
